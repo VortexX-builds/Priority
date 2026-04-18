@@ -9,10 +9,10 @@ const getPriorityTier = (score) => {
 };
 
 const LABEL_COLORS = {
-    Critical: '#ef4444',
-    High:     '#f97316',
-    Medium:   '#eab308',
-    Low:      '#6b7280',
+    Critical: '#dc2626',
+    High:     '#ea580c',
+    Medium:   '#ca8a04',
+    Low:      '#71717a',
 };
 
 const formatDeadlineDays = (createdAt, deadlineDays) => {
@@ -25,10 +25,18 @@ const formatDeadlineDays = (createdAt, deadlineDays) => {
     return `Due in ${Math.ceil(diffDays)}d`;
 };
 
+const getDaysRemaining = (createdAt, deadlineDays) => {
+    if (!deadlineDays) return null;
+    const created = createdAt ? new Date(createdAt) : new Date();
+    const dueDate = new Date(created.getTime() + deadlineDays * 24 * 3600 * 1000);
+    return (dueDate - new Date()) / 86400000;
+};
+
 const TaskRow = ({ task, isSelected, onToggleSelect }) => {
     const score = task.priority_score ?? 0;
     const tier  = getPriorityTier(score);
     const label = task.priority_label || 'Low';
+    const color = LABEL_COLORS[label] || '#71717a';
 
     return (
         <div className="task-item" style={{ opacity: isSelected ? 0.85 : 1 }} onClick={() => onToggleSelect(task.id)}>
@@ -47,7 +55,7 @@ const TaskRow = ({ task, isSelected, onToggleSelect }) => {
                 <div className="task-title">{task.title}</div>
                 <div className="task-meta">
                     <span className="tag">🕐 {formatDeadlineDays(task.created_at, task.deadline_days)}</span>
-                    <span className="tag">⚙️ {task.effort}h effort</span>
+                    <span className="tag">⚙️ {task.effort} effort</span>
                     <span className="tag">⚡ Impact {task.impact}/10</span>
                     <span className="tag">📦 Workload {task.workload ?? 1}</span>
                 </div>
@@ -55,14 +63,12 @@ const TaskRow = ({ task, isSelected, onToggleSelect }) => {
             <div className="task-side">
                 <div className="score-num">{score.toFixed(2)}</div>
                 <div className="score-label">score</div>
-                <div style={{
-                    marginTop: '0.25rem',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    color: LABEL_COLORS[label] || '#6b7280',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em'
-                }}>{label}</div>
+                <div
+                    className="priority-label-badge"
+                    style={{ color, background: `${color}18`, border: `1px solid ${color}33` }}
+                >
+                    {label}
+                </div>
             </div>
         </div>
     );
@@ -90,6 +96,31 @@ const ConfirmModal = ({ count, onConfirm, onCancel }) => (
     </div>
 );
 
+const exportToCSV = (tasks) => {
+    const headers = ['Task ID', 'Title', 'Deadline Days', 'Effort', 'Impact', 'Workload', 'Priority Score', 'Priority Label', 'Status'];
+    const rows = tasks.map(t => [
+        t.external_task_id || t.id,
+        `"${(t.title || '').replace(/"/g, '""')}"`,
+        t.deadline_days ?? '',
+        t.effort ?? '',
+        t.impact ?? '',
+        t.workload ?? '',
+        t.priority_score != null ? Number(t.priority_score).toFixed(4) : '',
+        t.priority_label || '',
+        t.status || '',
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tasks-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
+
 const SmartQueue = () => {
     const [tasks, setTasks]           = useState([]);
     const [loading, setLoading]       = useState(true);
@@ -98,6 +129,8 @@ const SmartQueue = () => {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [editTask, setEditTask]     = useState(null);
     const [deleteModal, setDeleteModal] = useState(false);
+    const [alertDismissed, setAlertDismissed] = useState(false);
+    const [hoursInput, setHoursInput] = useState('');
 
     const [activeFilter, setActiveFilter] = useState(null);
 
@@ -175,8 +208,10 @@ const SmartQueue = () => {
 
     const handleBulkDone = async () => {
         try {
-            await Promise.all([...selected].map(id => completeTask(id, 0)));
+            const hours = parseFloat(hoursInput) || 0;
+            await Promise.all([...selected].map(id => completeTask(id, hours)));
             setSelected(new Set());
+            setHoursInput('');
             await loadTasks(page, pageSize);
         } catch {
             setError('Failed to mark tasks as done.');
@@ -197,15 +232,28 @@ const SmartQueue = () => {
         setEditTask(null);
     };
 
-    const criticalCount = tasks.filter(t => t.priority_label === 'Critical').length;
-    const highCount     = tasks.filter(t => t.priority_label === 'High').length;
+    // Stats for the new bar
+    const lowCount  = tasks.filter(t => t.priority_label === 'Low').length;
+    const medCount  = tasks.filter(t => t.priority_label === 'Medium').length;
+    const highCount = tasks.filter(t => t.priority_label === 'High' || t.priority_label === 'Critical').length;
 
-    const displayedTasks = activeFilter === 'critical'
-        ? tasks.filter(t => t.priority_label === 'Critical')
+    // Alert: tasks overdue or due within 2 days
+    const overdueTasks = tasks.filter(t => {
+        const d = getDaysRemaining(t.created_at, t.deadline_days);
+        return d !== null && d < 0;
+    });
+    const approachingTasks = tasks.filter(t => {
+        const d = getDaysRemaining(t.created_at, t.deadline_days);
+        return d !== null && d >= 0 && d <= 2;
+    });
+    const hasAlerts = (overdueTasks.length > 0 || approachingTasks.length > 0) && !alertDismissed;
+
+    const displayedTasks = activeFilter === 'low'
+        ? tasks.filter(t => t.priority_label === 'Low')
+        : activeFilter === 'medium'
+        ? tasks.filter(t => t.priority_label === 'Medium')
         : activeFilter === 'high'
-        ? tasks.filter(t => t.priority_label === 'High')
-        : activeFilter === 'selected'
-        ? tasks.filter(t => selected.has(t.id))
+        ? tasks.filter(t => t.priority_label === 'High' || t.priority_label === 'Critical')
         : tasks;
 
     const toggleFilter = (key) => setActiveFilter(prev => prev === key ? null : key);
@@ -216,7 +264,6 @@ const SmartQueue = () => {
 
     return (
         <>
-            {/* Drawer overlay */}
             {deleteModal && (
                 <ConfirmModal
                     count={selected.size}
@@ -230,7 +277,6 @@ const SmartQueue = () => {
                 onClick={handleCloseDrawer}
             />
 
-            {/* Task drawer */}
             <aside className={`task-drawer${drawerOpen ? ' open' : ''}`}>
                 <div className="task-drawer-header">
                     <span className="task-drawer-title">{editTask ? 'Edit Task' : 'New Task'}</span>
@@ -257,7 +303,6 @@ const SmartQueue = () => {
                 </div>
             </aside>
 
-            {/* Main queue page */}
             <div className="queue-page">
                 {/* Top bar */}
                 <div className="page-topbar">
@@ -266,41 +311,74 @@ const SmartQueue = () => {
                         <p className="page-subtitle">Tasks ranked by priority score · auto-refreshes every 60s</p>
                     </div>
                     <div className="page-topbar-right">
+                        <button
+                            className="btn-ghost"
+                            onClick={() => exportToCSV(tasks)}
+                            title="Export all tasks as CSV"
+                        >
+                            ↓ Export CSV
+                        </button>
                         <button className="btn-primary btn-add-task" onClick={() => setDrawerOpen(true)}>
                             + Add Task
                         </button>
                     </div>
                 </div>
 
-                {/* Mini stats strip */}
+                {/* Alert banners */}
+                {hasAlerts && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {overdueTasks.length > 0 && (
+                            <div className="alert-banner danger">
+                                <span>
+                                    ⚠ <strong>{overdueTasks.length} task{overdueTasks.length !== 1 ? 's' : ''} overdue:</strong>{' '}
+                                    {overdueTasks.slice(0, 4).map(t => t.title).join(', ')}
+                                    {overdueTasks.length > 4 ? ` +${overdueTasks.length - 4} more` : ''}
+                                </span>
+                                <button className="alert-dismiss" onClick={() => setAlertDismissed(true)}>×</button>
+                            </div>
+                        )}
+                        {approachingTasks.length > 0 && (
+                            <div className="alert-banner warning">
+                                <span>
+                                    🕐 <strong>{approachingTasks.length} task{approachingTasks.length !== 1 ? 's' : ''} due within 2 days:</strong>{' '}
+                                    {approachingTasks.slice(0, 4).map(t => t.title).join(', ')}
+                                    {approachingTasks.length > 4 ? ` +${approachingTasks.length - 4} more` : ''}
+                                </span>
+                                <button className="alert-dismiss" onClick={() => setAlertDismissed(true)}>×</button>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Stats strip: Low | Medium | High | Total */}
                 <div className="queue-stats-row">
                     <div
-                        className={`queue-stat${activeFilter === null ? ' active' : ''}`}
-                        onClick={() => setActiveFilter(null)}
+                        className={`queue-stat${activeFilter === 'low' ? ' active' : ''}`}
+                        onClick={() => toggleFilter('low')}
                     >
-                        <span className="queue-stat-value">{totalCount}</span>
-                        <span className="queue-stat-label">Pending</span>
+                        <span className="queue-stat-value" style={{ color: '#71717a' }}>{lowCount}</span>
+                        <span className="queue-stat-label">Low Priority</span>
                     </div>
                     <div
-                        className={`queue-stat${activeFilter === 'critical' ? ' active' : ''}`}
-                        onClick={() => toggleFilter('critical')}
+                        className={`queue-stat${activeFilter === 'medium' ? ' active' : ''}`}
+                        onClick={() => toggleFilter('medium')}
                     >
-                        <span className="queue-stat-value" style={{ color: 'var(--red)' }}>{criticalCount}</span>
-                        <span className="queue-stat-label">Critical</span>
+                        <span className="queue-stat-value" style={{ color: '#ca8a04' }}>{medCount}</span>
+                        <span className="queue-stat-label">Medium Priority</span>
                     </div>
                     <div
                         className={`queue-stat${activeFilter === 'high' ? ' active' : ''}`}
                         onClick={() => toggleFilter('high')}
                     >
-                        <span className="queue-stat-value" style={{ color: 'var(--amber)' }}>{highCount}</span>
+                        <span className="queue-stat-value" style={{ color: '#ea580c' }}>{highCount}</span>
                         <span className="queue-stat-label">High Priority</span>
                     </div>
                     <div
-                        className={`queue-stat${activeFilter === 'selected' ? ' active' : ''}`}
-                        onClick={() => toggleFilter('selected')}
+                        className={`queue-stat${activeFilter === null ? ' active' : ''}`}
+                        onClick={() => setActiveFilter(null)}
                     >
-                        <span className="queue-stat-value" style={{ color: 'var(--violet)' }}>{selected.size}</span>
-                        <span className="queue-stat-label">Selected</span>
+                        <span className="queue-stat-value">{totalCount}</span>
+                        <span className="queue-stat-label">Total</span>
                     </div>
                 </div>
 
@@ -308,14 +386,27 @@ const SmartQueue = () => {
                 {selected.size > 0 && (
                     <div className="bulk-action-bar">
                         <span>{selected.size} task{selected.size !== 1 ? 's' : ''} selected</span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                placeholder="Hours taken"
+                                value={hoursInput}
+                                onChange={(e) => setHoursInput(e.target.value)}
+                                style={{
+                                    width: '9rem', padding: '0.3rem 0.5rem',
+                                    background: 'var(--surface-2)', border: '1px solid var(--border-color)',
+                                    borderRadius: '4px', color: 'var(--text-1)', fontSize: '0.82rem'
+                                }}
+                            />
                             <button className="btn-sm btn-success" onClick={handleBulkDone}>
                                 Mark Done
                             </button>
                             {selected.size === 1 && (
                                 <button
                                     className="btn-sm"
-                                    style={{ background: '#1e3a5f', color: '#60a5fa', border: '1px solid #2563eb' }}
+                                    style={{ background: 'rgba(37,99,235,0.1)', color: '#60a5fa', border: '1px solid rgba(37,99,235,0.25)' }}
                                     onClick={handleOpenEdit}
                                 >
                                     Edit
@@ -340,7 +431,6 @@ const SmartQueue = () => {
                     </div>
                 ) : (
                     <>
-                        {/* List header */}
                         <div className="task-list-header">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                                 <div className="task-checkbox-wrap" style={{ padding: '0 0.2rem 0 0' }}>
@@ -379,7 +469,7 @@ const SmartQueue = () => {
                                     <span style={{ fontSize: '0.82rem', color: 'var(--text-3)', whiteSpace: 'nowrap', padding: '0 0.4rem' }}>
                                         Page <strong style={{ color: 'var(--text-1)' }}>{page}</strong> of <strong style={{ color: 'var(--text-1)' }}>{totalPages}</strong>
                                         &nbsp;·&nbsp;
-                                        <span style={{ color: 'var(--violet)' }}>{start}–{end}</span> of {totalCount}
+                                        <span style={{ color: 'var(--accent)' }}>{start}–{end}</span> of {totalCount}
                                     </span>
 
                                     <button

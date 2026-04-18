@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
 import SmartQueue from './components/SmartQueue';
 import PulseDashboard from './components/PulseDashboard';
+import Preloader from './components/Preloader';
+import logo from './assets/Priority Logo.png';
 import './index.css';
 
 function App() {
   const [activeTab, setActiveTab] = useState('queue');
+  const [ready, setReady] = useState(false);
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <>
+      {!ready && <Preloader onDone={() => setReady(true)} />}
+      <div className={`app-shell${ready ? ' app-ready' : ' app-loading'}`}>
+        <aside className="sidebar">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-mark">P</div>
+          <img src={logo} alt="Priority" className="sidebar-logo-img" />
           <div className="sidebar-logo-text">
             <span className="sidebar-logo-name">Priority</span>
             <span className="sidebar-logo-sub">Task Manager</span>
@@ -51,12 +56,13 @@ function App() {
           </button>
         </nav>
 
-      </aside>
+        </aside>
 
-      <div className="content-area">
-        {activeTab === 'queue' ? <SmartQueue /> : <PulseDashboard />}
+        <div className="content-area">
+          {activeTab === 'queue' ? <SmartQueue /> : <PulseDashboard />}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

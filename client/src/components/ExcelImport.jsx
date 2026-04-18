@@ -2,18 +2,33 @@ import React, { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { importTasks } from '../api';
 
-// Expected headers (case-insensitive matching)
 const FIELD_MAP = {
     task_id:        'external_task_id',
     deadline_days:  'deadline_days',
     effort:         'effort',
     impact:         'impact',
     workload:       'workload',
-    // priority_score and priority_label are ignored — recalculated by the engine
+};
+
+const LABEL_COLORS = {
+    Critical: '#dc2626',
+    High:     '#ea580c',
+    Medium:   '#ca8a04',
+    Low:      '#71717a',
 };
 
 function normalizeHeader(h) {
     return String(h).trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function calcPreviewPriority(deadline_days, effort, impact, workload) {
+    if (!deadline_days || !effort || !impact || !workload) return null;
+    const hoursRemaining = Math.max(0.1, deadline_days * 24);
+    const score = Math.max(0, (impact * 0.4) + ((1 / hoursRemaining) * 0.3) - (effort * 0.15) - (workload * 0.15));
+    if (score >= 5) return 'Critical';
+    if (score >= 3) return 'High';
+    if (score >= 1) return 'Medium';
+    return 'Low';
 }
 
 function parseRows(worksheet) {
@@ -32,10 +47,15 @@ function parseRows(worksheet) {
 
         const errors = [];
         if (!external_task_id)              errors.push('task_id is empty');
-        if (isNaN(deadline_days) || deadline_days < 1) errors.push('deadline_days must be ≥ 1');
-        if (isNaN(effort) || effort < 1 || effort > 200) errors.push('effort must be 1–200');
-        if (isNaN(impact) || impact < 1 || impact > 10)  errors.push('impact must be 1–10');
-        if (isNaN(workload) || workload <= 0)             errors.push('workload must be > 0');
+        if (isNaN(deadline_days) || deadline_days < 1 || deadline_days > 365) errors.push('deadline_days must be 1–365');
+        if (isNaN(effort) || effort < 1 || effort > 20)   errors.push('effort must be 1–20');
+        if (isNaN(impact) || impact < 1 || impact > 10)   errors.push('impact must be 1–10');
+        if (isNaN(workload) || workload < 1 || workload > 10) errors.push('workload must be 1–10');
+
+        const valid = errors.length === 0;
+        const priority_label = valid
+            ? calcPreviewPriority(deadline_days, effort, impact, workload)
+            : null;
 
         return {
             _rowNum: idx + 2,
@@ -45,8 +65,9 @@ function parseRows(worksheet) {
             effort:         isNaN(effort) ? null : effort,
             impact:         isNaN(impact) ? null : impact,
             workload:       isNaN(workload) ? null : workload,
+            priority_label,
             _errors: errors,
-            _valid: errors.length === 0,
+            _valid: valid,
         };
     });
 }
@@ -77,7 +98,6 @@ const ExcelImport = ({ onTaskAdded }) => {
             }
         };
         reader.readAsArrayBuffer(file);
-        // Reset input so same file can be re-selected after clearing
         e.target.value = '';
     };
 
@@ -146,34 +166,51 @@ const ExcelImport = ({ onTaskAdded }) => {
                 <div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--muted-color)', marginBottom: '0.6rem' }}>
                         Preview — {validCount} valid, {rows.length - validCount} with errors
+                        <span style={{ marginLeft: '0.5rem', opacity: 0.7 }}>(Priority recalculated on import)</span>
                     </div>
 
                     <div style={{ overflowX: 'auto', maxHeight: '260px', overflowY: 'auto', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
                             <thead>
                                 <tr style={{ background: 'var(--card-bg)', position: 'sticky', top: 0 }}>
-                                    {['Row', 'Task ID', 'Days Due', 'Effort', 'Impact', 'Workload', 'Status'].map(h => (
+                                    {['Row', 'Task ID', 'Days Due', 'Effort', 'Impact', 'Workload', 'Est. Priority', 'Status'].map(h => (
                                         <th key={h} style={{ padding: '0.4rem 0.6rem', textAlign: 'left', color: 'var(--muted-color)', fontWeight: 600, borderBottom: '1px solid var(--border-color)', whiteSpace: 'nowrap' }}>{h}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {rows.map(row => (
-                                    <tr
-                                        key={row._rowNum}
-                                        style={{ borderLeft: `3px solid ${row._valid ? 'var(--success-color)' : '#ef4444'}` }}
-                                    >
-                                        <td style={{ padding: '0.35rem 0.6rem', color: 'var(--muted-color)' }}>{row._rowNum}</td>
-                                        <td style={{ padding: '0.35rem 0.6rem' }}>{row.external_task_id || '—'}</td>
-                                        <td style={{ padding: '0.35rem 0.6rem' }}>{row.deadline_days ?? '—'}</td>
-                                        <td style={{ padding: '0.35rem 0.6rem' }}>{row.effort ?? '—'}</td>
-                                        <td style={{ padding: '0.35rem 0.6rem' }}>{row.impact ?? '—'}</td>
-                                        <td style={{ padding: '0.35rem 0.6rem' }}>{row.workload ?? '—'}</td>
-                                        <td style={{ padding: '0.35rem 0.6rem', color: row._valid ? 'var(--success-color)' : '#ef4444', fontWeight: 600 }}>
-                                            {row._valid ? '✓ OK' : row._errors.join(', ')}
-                                        </td>
-                                    </tr>
-                                ))}
+                                {rows.map(row => {
+                                    const labelColor = LABEL_COLORS[row.priority_label] || '#71717a';
+                                    return (
+                                        <tr
+                                            key={row._rowNum}
+                                            style={{ borderLeft: `3px solid ${row._valid ? 'var(--success-color)' : '#dc2626'}` }}
+                                        >
+                                            <td style={{ padding: '0.35rem 0.6rem', color: 'var(--muted-color)' }}>{row._rowNum}</td>
+                                            <td style={{ padding: '0.35rem 0.6rem' }}>{row.external_task_id || '—'}</td>
+                                            <td style={{ padding: '0.35rem 0.6rem' }}>{row.deadline_days ?? '—'}</td>
+                                            <td style={{ padding: '0.35rem 0.6rem' }}>{row.effort ?? '—'}</td>
+                                            <td style={{ padding: '0.35rem 0.6rem' }}>{row.impact ?? '—'}</td>
+                                            <td style={{ padding: '0.35rem 0.6rem' }}>{row.workload ?? '—'}</td>
+                                            <td style={{ padding: '0.35rem 0.6rem' }}>
+                                                {row.priority_label ? (
+                                                    <span style={{
+                                                        display: 'inline-block', padding: '0.1rem 0.45rem',
+                                                        borderRadius: '4px', fontWeight: 700, fontSize: '0.7rem',
+                                                        textTransform: 'uppercase', letterSpacing: '0.05em',
+                                                        color: labelColor, background: `${labelColor}18`,
+                                                        border: `1px solid ${labelColor}33`
+                                                    }}>
+                                                        {row.priority_label}
+                                                    </span>
+                                                ) : '—'}
+                                            </td>
+                                            <td style={{ padding: '0.35rem 0.6rem', color: row._valid ? 'var(--success-color)' : '#dc2626', fontWeight: 600 }}>
+                                                {row._valid ? '✓ OK' : row._errors.join(', ')}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

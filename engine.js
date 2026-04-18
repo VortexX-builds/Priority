@@ -11,7 +11,7 @@ function getPriorityLabel(score) {
     return 'Low';
 }
 
-function calculatePriority(task) {
+function calculatePriority(task, avgVelocity = 1.0) {
     const { impact, effort, deadline_days, workload, created_at } = task;
 
     const createdAt = created_at ? new Date(created_at) : new Date();
@@ -20,15 +20,19 @@ function calculatePriority(task) {
 
     if (hoursRemaining <= 0.1) hoursRemaining = 0.1;
 
+    // Faster users (avgVelocity > 1) get a lower effective effort penalty
+    const effectiveEffort = (effort || 1) / Math.max(0.5, avgVelocity);
+
     const score =
         (impact * 0.4) +
         ((1 / hoursRemaining) * 0.3) -
-        ((effort || 1) * 0.15) -
+        (effectiveEffort * 0.15) -
         ((workload || 1.0) * 0.15);
 
+    const clampedScore = Math.max(0, score);
     return {
-        score: Number(score.toFixed(4)),
-        label: getPriorityLabel(score)
+        score: Number(clampedScore.toFixed(4)),
+        label: getPriorityLabel(clampedScore)
     };
 }
 
@@ -36,13 +40,22 @@ function updateTaskPriority(taskId, callback = () => {}) {
     db.get(`SELECT * FROM Tasks WHERE id = ?`, [taskId], (err, row) => {
         if (err || !row) return callback(err || new Error('Task not found'));
 
-        const { score, label } = calculatePriority(row);
+        const applyScore = (avgVelocity = 1.0) => {
+            const { score, label } = calculatePriority(row, avgVelocity);
+            db.run(
+                `UPDATE Tasks SET priority_score = ?, priority_label = ? WHERE id = ?`,
+                [score, label, taskId],
+                function(err) { callback(err, score, label); }
+            );
+        };
 
-        db.run(
-            `UPDATE Tasks SET priority_score = ?, priority_label = ? WHERE id = ?`,
-            [score, label, taskId],
-            function(err) { callback(err, score, label); }
-        );
+        if (row.user_id) {
+            db.get(`SELECT avg_velocity FROM Users WHERE id = ?`, [row.user_id], (err, user) => {
+                applyScore((!err && user) ? user.avg_velocity : 1.0);
+            });
+        } else {
+            applyScore(1.0);
+        }
     });
 }
 

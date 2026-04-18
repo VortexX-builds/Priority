@@ -32,19 +32,29 @@ app.get('/api/users', (req, res) => {
 
 // --- TASKS API ---
 app.post('/api/tasks', (req, res) => {
-    const { external_task_id, title, deadline_days, effort, impact, workload } = req.body;
+    const { external_task_id, title, deadline_days, effort, impact, workload, user_id } = req.body;
+
+    const dd = parseInt(deadline_days, 10);
+    const ef = parseInt(effort, 10);
+    const im = parseInt(impact, 10);
+    const wl = parseFloat(workload);
+
+    if (!title || !String(title).trim()) return res.status(400).json({ error: 'title is required' });
+    if (isNaN(dd) || dd < 1 || dd > 365)   return res.status(400).json({ error: 'deadline_days must be 1–365' });
+    if (isNaN(ef) || ef < 1 || ef > 20)    return res.status(400).json({ error: 'effort must be 1–20' });
+    if (isNaN(im) || im < 1 || im > 10)    return res.status(400).json({ error: 'impact must be 1–10' });
+    if (isNaN(wl) || wl < 1 || wl > 10)    return res.status(400).json({ error: 'workload must be 1–10' });
+
     const query = `
-        INSERT INTO Tasks (external_task_id, title, deadline_days, effort, impact, workload)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO Tasks (external_task_id, title, deadline_days, effort, impact, workload, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
 
     db.run(query, [
         external_task_id || null,
-        title,
-        parseInt(deadline_days, 10) || 1,
-        parseInt(effort, 10) || 1,
-        parseInt(impact, 10) || 1,
-        parseFloat(workload) || 1.0
+        String(title).trim(),
+        dd, ef, im, wl,
+        user_id || null
     ], function(err) {
         if (err) return res.status(500).json({ error: err.message });
         const newTaskId = this.lastID;
@@ -104,11 +114,22 @@ app.patch('/api/tasks/:id/status', (req, res) => {
 
 app.patch('/api/tasks/:id', (req, res) => {
     const taskId = req.params.id;
-    const { title, deadline_days, effort, impact, workload } = req.body;
+    const { title, deadline_days, effort, impact, workload, user_id } = req.body;
+
+    const dd = parseInt(deadline_days, 10);
+    const ef = parseInt(effort, 10);
+    const im = parseInt(impact, 10);
+    const wl = parseFloat(workload);
+
+    if (!title || !String(title).trim()) return res.status(400).json({ error: 'title is required' });
+    if (isNaN(dd) || dd < 1 || dd > 365)   return res.status(400).json({ error: 'deadline_days must be 1–365' });
+    if (isNaN(ef) || ef < 1 || ef > 20)    return res.status(400).json({ error: 'effort must be 1–20' });
+    if (isNaN(im) || im < 1 || im > 10)    return res.status(400).json({ error: 'impact must be 1–10' });
+    if (isNaN(wl) || wl < 1 || wl > 10)    return res.status(400).json({ error: 'workload must be 1–10' });
+
     db.run(
-        `UPDATE Tasks SET title=?, deadline_days=?, effort=?, impact=?, workload=? WHERE id=?`,
-        [title, parseInt(deadline_days, 10) || 1, parseInt(effort, 10) || 1,
-         parseInt(impact, 10) || 1, parseFloat(workload) || 1.0, taskId],
+        `UPDATE Tasks SET title=?, deadline_days=?, effort=?, impact=?, workload=?, user_id=? WHERE id=?`,
+        [String(title).trim(), dd, ef, im, wl, user_id || null, taskId],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
             updateTaskPriority(taskId, (err, score, label) => {
