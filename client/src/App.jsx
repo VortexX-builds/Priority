@@ -7,34 +7,59 @@ function App() {
   const [activeTab, setActiveTab] = useState('queue');
 
   return (
-    <div className="app-container">
-      <header>
-        <div className="logo">
-          <h1>Priority</h1>
-          <p>Dynamic Multi-Factor Task Scoring Engine</p>
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          <div className="sidebar-logo-mark">P</div>
+          <div className="sidebar-logo-text">
+            <span className="sidebar-logo-name">PrioritizeAI</span>
+            <span className="sidebar-logo-sub">Task Scoring Engine</span>
+          </div>
         </div>
 
-        <nav>
+        <nav className="sidebar-nav">
           <button
-            id="nav-queue"
-            className={`nav-btn ${activeTab === 'queue' ? 'active' : ''}`}
+            className={`sidebar-nav-item ${activeTab === 'queue' ? 'active' : ''}`}
             onClick={() => setActiveTab('queue')}
           >
-            Smart Queue
+            <span className="sidebar-nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/>
+                <line x1="8" y1="12" x2="21" y2="12"/>
+                <line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/>
+                <line x1="3" y1="12" x2="3.01" y2="12"/>
+                <line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+            </span>
+            <span className="sidebar-nav-label">Smart Queue</span>
           </button>
+
           <button
-            id="nav-dashboard"
-            className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+            className={`sidebar-nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
             onClick={() => setActiveTab('dashboard')}
           >
-            Pulse Dashboard
+            <span className="sidebar-nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+              </svg>
+            </span>
+            <span className="sidebar-nav-label">Pulse Dashboard</span>
           </button>
         </nav>
-      </header>
 
-      <main>
+        <div className="sidebar-footer">
+          <span className="sidebar-footer-dot" />
+          <span className="sidebar-footer-text">AI Engine Active</span>
+        </div>
+      </aside>
+
+      <div className="content-area">
         {activeTab === 'queue' ? <SmartQueue /> : <PulseDashboard />}
-      </main>
+      </div>
     </div>
   );
 }

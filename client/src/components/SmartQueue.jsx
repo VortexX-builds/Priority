@@ -30,11 +30,11 @@ const TaskRow = ({ task, onComplete, onDelete, onEdit, isSelected, onToggleSelec
     const [hours, setHours]       = useState('');
     const [saving, setSaving]     = useState(false);
 
-    const [editing, setEditing]         = useState(false);
-    const [editTitle, setEditTitle]     = useState(task.title);
+    const [editing, setEditing]           = useState(false);
+    const [editTitle, setEditTitle]       = useState(task.title);
     const [editDeadline, setEditDeadline] = useState(task.deadline_days ?? '');
-    const [editEffort, setEditEffort]   = useState(task.effort);
-    const [editImpact, setEditImpact]   = useState(task.impact);
+    const [editEffort, setEditEffort]     = useState(task.effort);
+    const [editImpact, setEditImpact]     = useState(task.impact);
     const [editWorkload, setEditWorkload] = useState(task.workload ?? 1);
 
     const score = task.priority_score ?? 0;
@@ -83,7 +83,7 @@ const TaskRow = ({ task, onComplete, onDelete, onEdit, isSelected, onToggleSelec
                 type="checkbox"
                 checked={isSelected}
                 onChange={() => onToggleSelect(task.id)}
-                style={{ marginRight: '0.5rem', marginLeft: '0.1rem', accentColor: '#7c3aed', flexShrink: 0, cursor: 'pointer' }}
+                style={{ marginRight: '0.5rem', marginLeft: '0.75rem', accentColor: '#7c3aed', flexShrink: 0, cursor: 'pointer', alignSelf: 'center' }}
                 title="Select task"
             />
 
@@ -255,9 +255,10 @@ const SmartQueue = () => {
     const [error, setError]         = useState('');
     const [focusMode, setFocusMode] = useState(false);
     const [selected, setSelected]   = useState(new Set());
+    const [drawerOpen, setDrawerOpen] = useState(false);
 
-    const [page, setPage]           = useState(1);
-    const [pageSize, setPageSize]   = useState(50);
+    const [page, setPage]             = useState(1);
+    const [pageSize, setPageSize]     = useState(50);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
@@ -276,7 +277,6 @@ const SmartQueue = () => {
         }
     }, []);
 
-    // Keep a ref to current page/pageSize so the interval always uses fresh values
     const pageRef     = React.useRef(page);
     const pageSizeRef = React.useRef(pageSize);
     pageRef.current     = page;
@@ -354,10 +354,13 @@ const SmartQueue = () => {
         }
     };
 
-    const topTask = tasks[0];
+    const topTask    = tasks[0];
     const allSelected = tasks.length > 0 && selected.size === tasks.length;
-    const start = (page - 1) * pageSize + 1;
-    const end   = Math.min(page * pageSize, totalCount);
+    const start      = (page - 1) * pageSize + 1;
+    const end        = Math.min(page * pageSize, totalCount);
+
+    const criticalCount = tasks.filter(t => t.priority_label === 'Critical').length;
+    const highCount     = tasks.filter(t => t.priority_label === 'High').length;
 
     return (
         <>
@@ -369,16 +372,105 @@ const SmartQueue = () => {
                 />
             )}
 
-            <div className="queue-layout">
-                <div className="card">
-                    <h2 className="section-title">Log New Task</h2>
-                    <TaskForm onTaskAdded={() => { setPage(1); loadTasks(1, pageSize); }} />
+            {/* Drawer overlay */}
+            <div
+                className={`task-drawer-overlay${drawerOpen ? ' open' : ''}`}
+                onClick={() => setDrawerOpen(false)}
+            />
+
+            {/* Task drawer */}
+            <aside className={`task-drawer${drawerOpen ? ' open' : ''}`}>
+                <div className="task-drawer-header">
+                    <span className="task-drawer-title">New Task</span>
+                    <button
+                        className="task-drawer-close"
+                        onClick={() => setDrawerOpen(false)}
+                        aria-label="Close drawer"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div className="task-drawer-body">
+                    <TaskForm onTaskAdded={() => {
+                        setPage(1);
+                        loadTasks(1, pageSize);
+                        setDrawerOpen(false);
+                    }} />
+                </div>
+            </aside>
+
+            {/* Main queue page */}
+            <div className="queue-page">
+                {/* Top bar */}
+                <div className="page-topbar">
+                    <div className="page-topbar-left">
+                        <h1 className="page-title">Smart Queue</h1>
+                        <p className="page-subtitle">Tasks ranked by AI priority score · auto-refreshes every 60s</p>
+                    </div>
+                    <div className="page-topbar-right">
+                        {tasks.length > 0 && (
+                            <button className="btn-ghost" onClick={() => setFocusMode(true)}>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                                Focus Mode
+                            </button>
+                        )}
+                        <button className="btn-primary btn-add-task" onClick={() => setDrawerOpen(true)}>
+                            + Add Task
+                        </button>
+                    </div>
                 </div>
 
-                <div>
-                    <div className="queue-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                            {tasks.length > 0 && (
+                {/* Mini stats strip */}
+                <div className="queue-stats-row">
+                    <div className="queue-stat">
+                        <span className="queue-stat-value">{totalCount}</span>
+                        <span className="queue-stat-label">Pending</span>
+                    </div>
+                    <div className="queue-stat">
+                        <span className="queue-stat-value" style={{ color: 'var(--red)' }}>{criticalCount}</span>
+                        <span className="queue-stat-label">Critical</span>
+                    </div>
+                    <div className="queue-stat">
+                        <span className="queue-stat-value" style={{ color: 'var(--amber)' }}>{highCount}</span>
+                        <span className="queue-stat-label">High Priority</span>
+                    </div>
+                    <div className="queue-stat">
+                        <span className="queue-stat-value" style={{ color: 'var(--violet)' }}>{selected.size}</span>
+                        <span className="queue-stat-label">Selected</span>
+                    </div>
+                </div>
+
+                {/* Bulk action bar */}
+                {selected.size > 0 && (
+                    <div className="bulk-action-bar">
+                        <span>{selected.size} task{selected.size !== 1 ? 's' : ''} selected</span>
+                        <button className="btn-sm btn-danger" onClick={handleDeleteSelected}>
+                            Delete Selected
+                        </button>
+                    </div>
+                )}
+
+                {error && <div className="error-msg">{error}</div>}
+
+                {loading ? (
+                    <div className="loading">Engine is scoring tasks…</div>
+                ) : tasks.length === 0 ? (
+                    <div className="empty-state">
+                        <div style={{ fontSize: '2.5rem' }}>🎉</div>
+                        <h3 style={{ marginTop: '0.8rem' }}>All clear!</h3>
+                        <p>No pending tasks. Hit <strong>+ Add Task</strong> to get started.</p>
+                    </div>
+                ) : (
+                    <>
+                        {/* List header */}
+                        <div className="task-list-header">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                                 <input
                                     type="checkbox"
                                     checked={allSelected}
@@ -386,45 +478,10 @@ const SmartQueue = () => {
                                     title="Select all"
                                     style={{ accentColor: '#7c3aed', cursor: 'pointer', width: '1rem', height: '1rem' }}
                                 />
-                            )}
-                            <h2 className="section-title" style={{ marginBottom: 0 }}>Smart Queue</h2>
+                                <span className="task-count-badge">{totalCount} tasks</span>
+                            </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'center' }}>
-                            <span className="task-count-badge">{totalCount} pending</span>
-                            {selected.size > 0 && (
-                                <button
-                                    className="btn-sm btn-danger"
-                                    style={{ padding: '0.45rem 1rem', fontSize: '0.85rem' }}
-                                    onClick={handleDeleteSelected}
-                                >
-                                    Delete Selected ({selected.size})
-                                </button>
-                            )}
-                            {tasks.length > 0 && (
-                                <button
-                                    id="focus-mode-btn"
-                                    className="btn-primary"
-                                    style={{ width: 'auto', padding: '0.45rem 1rem', fontSize: '0.85rem' }}
-                                    onClick={() => setFocusMode(true)}
-                                >
-                                    Focus Mode
-                                </button>
-                            )}
-                        </div>
-                    </div>
 
-                    {error && <div className="error-msg">{error}</div>}
-
-                    {loading ? (
-                        <div className="loading">Engine is scoring tasks…</div>
-                    ) : tasks.length === 0 ? (
-                        <div className="empty-state">
-                            <div style={{ fontSize: '2.5rem' }}>🎉</div>
-                            <h3 style={{ marginTop: '0.8rem' }}>All clear!</h3>
-                            <p>No pending tasks. Add a new one on the left.</p>
-                        </div>
-                    ) : (
-                        <>
                         <div className="task-list">
                             {tasks.map(task => (
                                 <TaskRow
@@ -440,54 +497,41 @@ const SmartQueue = () => {
                         </div>
 
                         {totalPages > 1 && (
-                            <div style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                padding: '0.8rem 0.4rem', marginTop: '0.5rem', flexWrap: 'wrap', gap: '0.6rem'
-                            }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <div className="pagination">
+                                <div className="pagination-btns">
                                     <button
-                                        className="btn-sm"
-                                        style={{ background: '#1e1e2e', border: '1px solid #444', color: '#ccc', opacity: page === 1 ? 0.4 : 1 }}
+                                        className="btn-page"
                                         onClick={() => goToPage(page - 1)}
                                         disabled={page === 1}
                                     >← Prev</button>
 
-                                    <span style={{ fontSize: '0.82rem', color: '#aaa', whiteSpace: 'nowrap' }}>
-                                        Page <strong style={{ color: '#e2e8f0' }}>{page}</strong> of <strong style={{ color: '#e2e8f0' }}>{totalPages}</strong>
+                                    <span style={{ fontSize: '0.82rem', color: 'var(--text-3)', whiteSpace: 'nowrap', padding: '0 0.4rem' }}>
+                                        Page <strong style={{ color: 'var(--text-1)' }}>{page}</strong> of <strong style={{ color: 'var(--text-1)' }}>{totalPages}</strong>
                                         &nbsp;·&nbsp;
-                                        <span style={{ color: '#7c3aed' }}>{start}–{end}</span> of {totalCount}
+                                        <span style={{ color: 'var(--violet)' }}>{start}–{end}</span> of {totalCount}
                                     </span>
 
                                     <button
-                                        className="btn-sm"
-                                        style={{ background: '#1e1e2e', border: '1px solid #444', color: '#ccc', opacity: page === totalPages ? 0.4 : 1 }}
+                                        className="btn-page"
                                         onClick={() => goToPage(page + 1)}
                                         disabled={page === totalPages}
                                     >Next →</button>
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                    <span style={{ fontSize: '0.78rem', color: '#888' }}>Per page:</span>
+                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>Per page:</span>
                                     {PAGE_SIZE_OPTIONS.map(ps => (
                                         <button
                                             key={ps}
-                                            className="btn-sm"
-                                            style={{
-                                                background: pageSize === ps ? '#7c3aed' : '#1e1e2e',
-                                                border: `1px solid ${pageSize === ps ? '#7c3aed' : '#444'}`,
-                                                color: pageSize === ps ? '#fff' : '#aaa',
-                                                padding: '0.25rem 0.55rem',
-                                                fontSize: '0.78rem'
-                                            }}
+                                            className={`btn-page${pageSize === ps ? ' active' : ''}`}
                                             onClick={() => handlePageSizeChange(ps)}
                                         >{ps}</button>
                                     ))}
                                 </div>
                             </div>
                         )}
-                        </>
-                    )}
-                </div>
+                    </>
+                )}
             </div>
         </>
     );
