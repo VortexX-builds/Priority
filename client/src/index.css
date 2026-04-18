@@ -247,37 +247,6 @@ body::after {
   color: var(--text-2);
 }
 
-.sidebar-footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1rem 1.25rem 0;
-  border-top: 1px solid var(--sidebar-border);
-  margin-top: auto;
-}
-
-.sidebar-footer-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
-  flex-shrink: 0;
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.45; }
-}
-
-.sidebar-footer-text {
-  font-size: 0.7rem;
-  color: var(--text-3);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-}
 
 /* ============================================================
    CONTENT AREA
@@ -635,7 +604,12 @@ body::after {
   transition: background 0.2s ease;
 }
 
+.queue-stat { cursor: pointer; }
 .queue-stat:hover { background: var(--surface-2); }
+.queue-stat.active {
+  background: var(--surface-3);
+  box-shadow: inset 0 -2px 0 var(--violet);
+}
 
 .queue-stat-value {
   font-size: 1.4rem;
@@ -822,7 +796,7 @@ body::after {
   overflow: hidden;
   transition: all 0.22s var(--ease-out-expo);
   position: relative;
-  cursor: default;
+  cursor: pointer;
   animation: slideUp 0.3s var(--ease-out-expo) both;
 }
 
@@ -856,13 +830,13 @@ body::after {
 
 .task-body {
   flex: 1;
-  padding: 1.1rem 1.4rem;
+  padding: 0.55rem 1rem;
 }
 
 .task-title {
-  font-size: 0.97rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.2rem;
   color: var(--text-1);
   line-height: 1.3;
 }
@@ -883,57 +857,21 @@ body::after {
   gap: 0.25rem;
 }
 
-/* Completion inline panel */
-.complete-panel {
-  background: rgba(0,0,0,0.3);
-  border-top: 1px solid var(--border);
-  padding: 0.65rem 1.2rem;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
-.complete-panel label {
-  font-size: 0.75rem;
-  color: var(--text-3);
-  white-space: nowrap;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.hours-input {
-  width: 80px;
-  padding: 0.35rem 0.7rem;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-1);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.85rem;
-}
-
-.hours-input:focus {
-  outline: none;
-  border-color: var(--green);
-  box-shadow: 0 0 0 2px rgba(16,185,129,0.15);
-}
 
 /* Task right side */
 .task-side {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: space-between;
-  padding: 1.1rem 1.2rem;
-  gap: 0.5rem;
-  min-width: 110px;
+  justify-content: center;
+  padding: 0.55rem 0.9rem;
+  gap: 0.2rem;
+  min-width: 80px;
   border-left: 1px solid var(--border);
 }
 
 .score-num {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: 800;
   line-height: 1;
   font-family: 'JetBrains Mono', monospace;
@@ -951,142 +889,132 @@ body::after {
   font-weight: 700;
 }
 
-.task-btns {
+/* ============================================================
+   CONFIRM MODAL
+   ============================================================ */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+
+.confirm-modal {
+  background: rgba(12, 10, 20, 0.97);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  width: 360px;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 1.1rem;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(139,92,246,0.15);
+  animation: slideUp 0.2s var(--ease-out-expo);
+}
+
+.confirm-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--red);
+}
+
+.confirm-body { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.confirm-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.confirm-desc {
+  font-size: 0.82rem;
+  color: var(--text-3);
+  margin: 0;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.confirm-cancel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+
+.confirm-cancel:hover {
+  background: var(--surface-3);
+  color: var(--text-1);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ============================================================
-   FOCUS MODE — cinematic overlay
+   CUSTOM CHECKBOXES
    ============================================================ */
-.focus-mode {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.95);
-  z-index: 500;
+.task-checkbox-wrap {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
-  text-align: center;
-  backdrop-filter: blur(30px);
+  padding: 0 0.85rem;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
-.focus-mode::before {
+input[type="checkbox"].task-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+  position: relative;
+}
+
+input[type="checkbox"].task-checkbox:hover {
+  border-color: var(--violet);
+}
+
+input[type="checkbox"].task-checkbox:checked {
+  background: var(--violet);
+  border-color: var(--violet);
+}
+
+input[type="checkbox"].task-checkbox:checked::after {
   content: '';
   position: absolute;
-  width: 700px;
-  height: 700px;
-  background: radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%);
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
+  left: 3px;
+  top: 0px;
+  width: 5px;
+  height: 9px;
+  border: 2px solid white;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
 }
-
-.focus-card {
-  position: relative;
-  max-width: 600px;
-  width: 100%;
-  background: var(--surface-1);
-  border: 1px solid var(--border-glow);
-  padding: 3.5rem 3rem;
-  border-radius: var(--radius-xl);
-  box-shadow:
-    0 0 0 1px rgba(139,92,246,0.15),
-    0 40px 80px rgba(0,0,0,0.7),
-    var(--glow-violet);
-  animation: focusIn 0.4s var(--ease-out-expo);
-}
-
-@keyframes focusIn {
-  from { opacity: 0; transform: scale(0.88) translateY(24px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-.focus-score {
-  font-size: 4rem;
-  font-weight: 900;
-  font-family: 'JetBrains Mono', monospace;
-  line-height: 1;
-  margin-bottom: 0.3rem;
-  background: var(--grad-hero);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.focus-score-label {
-  font-size: 0.68rem;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  font-weight: 700;
-  margin-bottom: 2rem;
-}
-
-.focus-title {
-  font-size: 2.2rem;
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: -0.5px;
-  margin-bottom: 0.8rem;
-}
-
-.focus-meta {
-  color: var(--text-3);
-  font-size: 0.85rem;
-  font-family: 'JetBrains Mono', monospace;
-  margin-bottom: 2.5rem;
-  line-height: 1.8;
-}
-
-.focus-complete-row {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  justify-content: center;
-}
-
-.focus-complete-row input {
-  width: 110px;
-  padding: 0.75rem;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-1);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 1.05rem;
-  text-align: center;
-  transition: all 0.2s ease;
-}
-
-.focus-complete-row input:focus {
-  outline: none;
-  border-color: var(--green);
-  box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
-}
-
-.focus-exit {
-  margin-top: 2rem;
-  background: transparent;
-  color: var(--text-3);
-  border: none;
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  transition: color 0.2s ease;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.focus-exit:hover { color: var(--text-1); }
 
 /* ============================================================
    PULSE DASHBOARD — STATS GRID

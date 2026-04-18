@@ -12,8 +12,8 @@ function App() {
         <div className="sidebar-logo">
           <div className="sidebar-logo-mark">P</div>
           <div className="sidebar-logo-text">
-            <span className="sidebar-logo-name">PrioritizeAI</span>
-            <span className="sidebar-logo-sub">Task Scoring Engine</span>
+            <span className="sidebar-logo-name">Priority</span>
+            <span className="sidebar-logo-sub">Task Manager</span>
           </div>
         </div>
 
@@ -51,10 +51,6 @@ function App() {
           </button>
         </nav>
 
-        <div className="sidebar-footer">
-          <span className="sidebar-footer-dot" />
-          <span className="sidebar-footer-text">AI Engine Active</span>
-        </div>
       </aside>
 
       <div className="content-area">

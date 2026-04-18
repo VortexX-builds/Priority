@@ -182,5 +182,5 @@ app.get('/api/stats', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`PrioritizeAI Engine running on port ${PORT}`);
+    console.log(`Priority running on port ${PORT}`);
 });

@@ -1,16 +1,34 @@
-import React, { useState } from 'react';
-import { createTask } from '../api';
+import React, { useState, useEffect } from 'react';
+import { createTask, updateTask } from '../api';
 import ExcelImport from './ExcelImport';
 
-const TaskForm = ({ onTaskAdded }) => {
-    const [title, setTitle]           = useState('');
+const TaskForm = ({ onTaskAdded, editTask }) => {
+    const [title, setTitle]               = useState('');
     const [deadlineDays, setDeadlineDays] = useState(7);
-    const [effort, setEffort]         = useState(3);
-    const [impact, setImpact]         = useState(5);
-    const [workload, setWorkload]     = useState(1.0);
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError]           = useState('');
-    const [success, setSuccess]       = useState(false);
+    const [effort, setEffort]             = useState(3);
+    const [impact, setImpact]             = useState(5);
+    const [workload, setWorkload]         = useState(1.0);
+    const [submitting, setSubmitting]     = useState(false);
+    const [error, setError]               = useState('');
+    const [success, setSuccess]           = useState(false);
+
+    useEffect(() => {
+        if (editTask) {
+            setTitle(editTask.title || '');
+            setDeadlineDays(editTask.deadline_days ?? 7);
+            setEffort(editTask.effort ?? 3);
+            setImpact(editTask.impact ?? 5);
+            setWorkload(editTask.workload ?? 1.0);
+        } else {
+            setTitle('');
+            setDeadlineDays(7);
+            setEffort(3);
+            setImpact(5);
+            setWorkload(1.0);
+        }
+        setError('');
+        setSuccess(false);
+    }, [editTask]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -22,23 +40,28 @@ const TaskForm = ({ onTaskAdded }) => {
 
         setSubmitting(true);
         try {
-            await createTask({
-                title:        title.trim(),
+            const data = {
+                title:         title.trim(),
                 deadline_days: parseInt(deadlineDays, 10),
                 effort:        parseInt(effort, 10),
                 impact:        parseInt(impact, 10),
                 workload:      parseFloat(workload),
-            });
-            setTitle('');
-            setDeadlineDays(7);
-            setEffort(3);
-            setImpact(5);
-            setWorkload(1.0);
-            setSuccess(true);
-            setTimeout(() => setSuccess(false), 2500);
+            };
+            if (editTask) {
+                await updateTask(editTask.id, data);
+            } else {
+                await createTask(data);
+                setTitle('');
+                setDeadlineDays(7);
+                setEffort(3);
+                setImpact(5);
+                setWorkload(1.0);
+                setSuccess(true);
+                setTimeout(() => setSuccess(false), 2500);
+            }
             if (onTaskAdded) onTaskAdded();
         } catch (err) {
-            setError(err.message || 'Could not create task. Is the server running?');
+            setError(err.message || 'Could not save task. Is the server running?');
         } finally {
             setSubmitting(false);
         }
@@ -117,17 +140,20 @@ const TaskForm = ({ onTaskAdded }) => {
                     className="btn-primary"
                     disabled={submitting}
                 >
-                    {submitting ? 'Adding…' : 'Add Task to Engine'}
+                    {submitting ? (editTask ? 'Saving…' : 'Adding…') : (editTask ? 'Save Changes' : 'Add Task')}
                 </button>
             </form>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.4rem 0 1rem' }}>
-                <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
-                <span style={{ fontSize: '0.75rem', color: 'var(--muted-color)', whiteSpace: 'nowrap', letterSpacing: '0.05em' }}>OR IMPORT FROM EXCEL</span>
-                <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
-            </div>
-
-            <ExcelImport onTaskAdded={onTaskAdded} />
+            {!editTask && (
+                <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.4rem 0 1rem' }}>
+                        <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--muted-color)', whiteSpace: 'nowrap', letterSpacing: '0.05em' }}>OR IMPORT FROM EXCEL</span>
+                        <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+                    </div>
+                    <ExcelImport onTaskAdded={onTaskAdded} />
+                </>
+            )}
         </>
     );
 };

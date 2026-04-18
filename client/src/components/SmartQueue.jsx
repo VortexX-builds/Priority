@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import TaskForm from './TaskForm';
-import { fetchTasks, completeTask, deleteTask, deleteTasksBulk, updateTask } from '../api';
+import { fetchTasks, completeTask, deleteTask, deleteTasksBulk } from '../api';
 
 const getPriorityTier = (score) => {
     if (score >= 3) return 'high';
@@ -25,237 +25,81 @@ const formatDeadlineDays = (createdAt, deadlineDays) => {
     return `Due in ${Math.ceil(diffDays)}d`;
 };
 
-const TaskRow = ({ task, onComplete, onDelete, onEdit, isSelected, onToggleSelect }) => {
-    const [expanded, setExpanded] = useState(false);
-    const [hours, setHours]       = useState('');
-    const [saving, setSaving]     = useState(false);
-
-    const [editing, setEditing]           = useState(false);
-    const [editTitle, setEditTitle]       = useState(task.title);
-    const [editDeadline, setEditDeadline] = useState(task.deadline_days ?? '');
-    const [editEffort, setEditEffort]     = useState(task.effort);
-    const [editImpact, setEditImpact]     = useState(task.impact);
-    const [editWorkload, setEditWorkload] = useState(task.workload ?? 1);
-
+const TaskRow = ({ task, isSelected, onToggleSelect }) => {
     const score = task.priority_score ?? 0;
     const tier  = getPriorityTier(score);
     const label = task.priority_label || 'Low';
 
-    const handleComplete = async () => {
-        const h = parseFloat(hours);
-        if (!h || h <= 0) { alert('Enter a valid number of hours.'); return; }
-        setSaving(true);
-        await onComplete(task.id, h);
-        setSaving(false);
-        setExpanded(false);
-    };
-
-    const handleDelete = async () => {
-        if (!window.confirm(`Delete "${task.title}"?`)) return;
-        await onDelete(task.id);
-    };
-
-    const handleSaveEdit = async () => {
-        setSaving(true);
-        await onEdit(task.id, {
-            title: editTitle,
-            deadline_days: editDeadline,
-            effort: editEffort,
-            impact: editImpact,
-            workload: editWorkload,
-        });
-        setSaving(false);
-        setEditing(false);
-    };
-
-    const handleCancelEdit = () => {
-        setEditTitle(task.title);
-        setEditDeadline(task.deadline_days ?? '');
-        setEditEffort(task.effort);
-        setEditImpact(task.impact);
-        setEditWorkload(task.workload ?? 1);
-        setEditing(false);
-    };
-
     return (
-        <div className="task-item" style={{ opacity: isSelected ? 0.85 : 1 }}>
-            <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={() => onToggleSelect(task.id)}
-                style={{ marginRight: '0.5rem', marginLeft: '0.75rem', accentColor: '#7c3aed', flexShrink: 0, cursor: 'pointer', alignSelf: 'center' }}
-                title="Select task"
-            />
-
+        <div className="task-item" style={{ opacity: isSelected ? 0.85 : 1 }} onClick={() => onToggleSelect(task.id)}>
+            <div className="task-checkbox-wrap">
+                <input
+                    type="checkbox"
+                    className="task-checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(task.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Select task"
+                />
+            </div>
             <div className={`priority-bar ${tier}`} />
-
-            <div style={{ flex: 1 }}>
-                <div className="task-body">
-                    <div className="task-title">{task.title}</div>
-                    <div className="task-meta">
-                        <span className="tag">🕐 {formatDeadlineDays(task.created_at, task.deadline_days)}</span>
-                        <span className="tag">⚙️ {task.effort}h effort</span>
-                        <span className="tag">⚡ Impact {task.impact}/10</span>
-                        <span className="tag">📦 Workload {task.workload ?? 1}</span>
-                    </div>
+            <div className="task-body">
+                <div className="task-title">{task.title}</div>
+                <div className="task-meta">
+                    <span className="tag">🕐 {formatDeadlineDays(task.created_at, task.deadline_days)}</span>
+                    <span className="tag">⚙️ {task.effort}h effort</span>
+                    <span className="tag">⚡ Impact {task.impact}/10</span>
+                    <span className="tag">📦 Workload {task.workload ?? 1}</span>
                 </div>
-
-                {expanded && (
-                    <div className="complete-panel">
-                        <label>Hours taken:</label>
-                        <input
-                            className="hours-input"
-                            type="number"
-                            min="0.5"
-                            step="0.5"
-                            placeholder={`~${(task.effort * 1.5).toFixed(1)}`}
-                            value={hours}
-                            onChange={(e) => setHours(e.target.value)}
-                            autoFocus
-                        />
-                        <button className="btn-sm btn-success" onClick={handleComplete} disabled={saving}>
-                            {saving ? '…' : 'Confirm Done'}
-                        </button>
-                        <button className="btn-sm btn-danger" onClick={() => setExpanded(false)}>
-                            Cancel
-                        </button>
-                    </div>
-                )}
-
-                {editing && (
-                    <div className="complete-panel" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <input
-                            className="hours-input"
-                            style={{ width: '100%', marginBottom: '0.25rem' }}
-                            type="text"
-                            placeholder="Title"
-                            value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            autoFocus
-                        />
-                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                            <input className="hours-input" style={{ width: '5rem' }} type="number" min="1" placeholder="Days due" title="Deadline days" value={editDeadline} onChange={(e) => setEditDeadline(e.target.value)} />
-                            <input className="hours-input" style={{ width: '5rem' }} type="number" min="1" placeholder="Effort h" title="Effort (hours)" value={editEffort} onChange={(e) => setEditEffort(e.target.value)} />
-                            <input className="hours-input" style={{ width: '5rem' }} type="number" min="1" max="10" placeholder="Impact" title="Impact /10" value={editImpact} onChange={(e) => setEditImpact(e.target.value)} />
-                            <input className="hours-input" style={{ width: '5rem' }} type="number" min="0.1" step="0.1" placeholder="Workload" title="Workload" value={editWorkload} onChange={(e) => setEditWorkload(e.target.value)} />
-                        </div>
-                        <button className="btn-sm btn-success" onClick={handleSaveEdit} disabled={saving}>
-                            {saving ? '…' : 'Save'}
-                        </button>
-                        <button className="btn-sm btn-danger" onClick={handleCancelEdit}>
-                            Cancel
-                        </button>
-                    </div>
-                )}
             </div>
-
             <div className="task-side">
-                <div>
-                    <div className="score-num">{score.toFixed(2)}</div>
-                    <div className="score-label">score</div>
-                    <div style={{
-                        marginTop: '0.25rem',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        color: LABEL_COLORS[label] || '#6b7280',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.04em'
-                    }}>{label}</div>
-                </div>
-                <div className="task-btns">
-                    {!expanded && !editing && (
-                        <button className="btn-sm btn-success" onClick={() => setExpanded(true)}>
-                            Done ✓
-                        </button>
-                    )}
-                    {!expanded && !editing && (
-                        <button
-                            className="btn-sm"
-                            style={{ background: '#1e3a5f', color: '#60a5fa', border: '1px solid #2563eb' }}
-                            onClick={() => setEditing(true)}
-                        >
-                            Edit
-                        </button>
-                    )}
-                    {!editing && (
-                        <button className="btn-sm btn-danger" onClick={handleDelete}>
-                            Delete
-                        </button>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const FocusMode = ({ task, onExit, onComplete }) => {
-    const [hours, setHours] = useState('');
-    const [saving, setSaving] = useState(false);
-    const focusScore = task.priority_score ?? 0;
-    const label = task.priority_label || 'Low';
-
-    const handleComplete = async () => {
-        const h = parseFloat(hours);
-        if (!h || h <= 0) { alert('Enter a valid number of hours.'); return; }
-        setSaving(true);
-        await onComplete(task.id, h);
-        setSaving(false);
-        onExit();
-    };
-
-    return (
-        <div className="focus-mode">
-            <div className="focus-card">
-                <div className="focus-score">{focusScore.toFixed(2)}</div>
-                <div className="focus-score-label">Priority Score</div>
+                <div className="score-num">{score.toFixed(2)}</div>
+                <div className="score-label">score</div>
                 <div style={{
-                    fontSize: '0.8rem',
+                    marginTop: '0.25rem',
+                    fontSize: '0.7rem',
                     fontWeight: 700,
                     color: LABEL_COLORS[label] || '#6b7280',
                     textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    marginBottom: '0.5rem'
+                    letterSpacing: '0.04em'
                 }}>{label}</div>
-
-                <div className="focus-title">{task.title}</div>
-                <div className="focus-meta">
-                    {formatDeadlineDays(task.created_at, task.deadline_days)}<br />
-                    ⚙️ {task.effort}h effort &nbsp;•&nbsp; ⚡ Impact {task.impact}/10 &nbsp;•&nbsp; 📦 Workload {task.workload ?? 1}
-                </div>
-
-                <div className="focus-complete-row">
-                    <input
-                        type="number"
-                        min="0.5"
-                        step="0.5"
-                        placeholder={`hrs (~${(task.effort * 1.5).toFixed(1)})`}
-                        value={hours}
-                        onChange={(e) => setHours(e.target.value)}
-                    />
-                    <button
-                        className="btn-primary"
-                        style={{ width: 'auto', padding: '0.7rem 1.4rem' }}
-                        onClick={handleComplete}
-                        disabled={saving}
-                    >
-                        {saving ? 'Saving…' : 'Mark Complete'}
-                    </button>
-                </div>
             </div>
-            <button className="focus-exit" onClick={onExit}>← Exit Focus Mode</button>
         </div>
     );
 };
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
 
+const ConfirmModal = ({ count, onConfirm, onCancel }) => (
+    <div className="confirm-overlay" onClick={onCancel}>
+        <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+            </div>
+            <div className="confirm-body">
+                <h3 className="confirm-title">Delete {count} task{count !== 1 ? 's' : ''}?</h3>
+                <p className="confirm-desc">This action cannot be undone.</p>
+            </div>
+            <div className="confirm-actions">
+                <button className="btn-sm confirm-cancel" onClick={onCancel}>Cancel</button>
+                <button className="btn-sm btn-danger" onClick={onConfirm}>Delete</button>
+            </div>
+        </div>
+    </div>
+);
+
 const SmartQueue = () => {
-    const [tasks, setTasks]         = useState([]);
-    const [loading, setLoading]     = useState(true);
-    const [error, setError]         = useState('');
-    const [focusMode, setFocusMode] = useState(false);
-    const [selected, setSelected]   = useState(new Set());
+    const [tasks, setTasks]           = useState([]);
+    const [loading, setLoading]       = useState(true);
+    const [error, setError]           = useState('');
+    const [selected, setSelected]     = useState(new Set());
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const [editTask, setEditTask]     = useState(null);
+    const [deleteModal, setDeleteModal] = useState(false);
+
+    const [activeFilter, setActiveFilter] = useState(null);
 
     const [page, setPage]             = useState(1);
     const [pageSize, setPageSize]     = useState(50);
@@ -300,33 +144,6 @@ const SmartQueue = () => {
         loadTasks(1, ps);
     };
 
-    const handleComplete = async (taskId, hoursTaken) => {
-        try {
-            await completeTask(taskId, hoursTaken);
-            await loadTasks(page, pageSize);
-        } catch {
-            setError('Failed to complete task.');
-        }
-    };
-
-    const handleDelete = async (taskId) => {
-        try {
-            await deleteTask(taskId);
-            await loadTasks(page, pageSize);
-        } catch {
-            setError('Failed to delete task.');
-        }
-    };
-
-    const handleEdit = async (taskId, fields) => {
-        try {
-            await updateTask(taskId, fields);
-            await loadTasks(page, pageSize);
-        } catch {
-            setError('Failed to update task.');
-        }
-    };
-
     const handleToggleSelect = (taskId) => {
         setSelected(prev => {
             const s = new Set(prev);
@@ -337,14 +154,16 @@ const SmartQueue = () => {
 
     const handleSelectAll = (e) => {
         if (e.target.checked) {
-            setSelected(new Set(tasks.map(t => t.id)));
+            setSelected(new Set(displayedTasks.map(t => t.id)));
         } else {
             setSelected(new Set());
         }
     };
 
-    const handleDeleteSelected = async () => {
-        if (!window.confirm(`Delete ${selected.size} task(s)?`)) return;
+    const handleDeleteSelected = () => setDeleteModal(true);
+
+    const confirmDelete = async () => {
+        setDeleteModal(false);
         try {
             await deleteTasksBulk([...selected]);
             setSelected(new Set());
@@ -354,37 +173,70 @@ const SmartQueue = () => {
         }
     };
 
-    const topTask    = tasks[0];
-    const allSelected = tasks.length > 0 && selected.size === tasks.length;
-    const start      = (page - 1) * pageSize + 1;
-    const end        = Math.min(page * pageSize, totalCount);
+    const handleBulkDone = async () => {
+        try {
+            await Promise.all([...selected].map(id => completeTask(id, 0)));
+            setSelected(new Set());
+            await loadTasks(page, pageSize);
+        } catch {
+            setError('Failed to mark tasks as done.');
+        }
+    };
+
+    const handleOpenEdit = () => {
+        const taskId = [...selected][0];
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+            setEditTask(task);
+            setDrawerOpen(true);
+        }
+    };
+
+    const handleCloseDrawer = () => {
+        setDrawerOpen(false);
+        setEditTask(null);
+    };
 
     const criticalCount = tasks.filter(t => t.priority_label === 'Critical').length;
     const highCount     = tasks.filter(t => t.priority_label === 'High').length;
 
+    const displayedTasks = activeFilter === 'critical'
+        ? tasks.filter(t => t.priority_label === 'Critical')
+        : activeFilter === 'high'
+        ? tasks.filter(t => t.priority_label === 'High')
+        : activeFilter === 'selected'
+        ? tasks.filter(t => selected.has(t.id))
+        : tasks;
+
+    const toggleFilter = (key) => setActiveFilter(prev => prev === key ? null : key);
+
+    const allSelected   = displayedTasks.length > 0 && displayedTasks.every(t => selected.has(t.id));
+    const start         = (page - 1) * pageSize + 1;
+    const end           = Math.min(page * pageSize, totalCount);
+
     return (
         <>
-            {focusMode && topTask && (
-                <FocusMode
-                    task={topTask}
-                    onExit={() => setFocusMode(false)}
-                    onComplete={handleComplete}
+            {/* Drawer overlay */}
+            {deleteModal && (
+                <ConfirmModal
+                    count={selected.size}
+                    onConfirm={confirmDelete}
+                    onCancel={() => setDeleteModal(false)}
                 />
             )}
 
-            {/* Drawer overlay */}
             <div
                 className={`task-drawer-overlay${drawerOpen ? ' open' : ''}`}
-                onClick={() => setDrawerOpen(false)}
+                onClick={handleCloseDrawer}
             />
 
             {/* Task drawer */}
             <aside className={`task-drawer${drawerOpen ? ' open' : ''}`}>
                 <div className="task-drawer-header">
-                    <span className="task-drawer-title">New Task</span>
+                    <span className="task-drawer-title">{editTask ? 'Edit Task' : 'New Task'}</span>
                     <button
                         className="task-drawer-close"
-                        onClick={() => setDrawerOpen(false)}
+                        onClick={handleCloseDrawer}
                         aria-label="Close drawer"
                     >
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -394,11 +246,14 @@ const SmartQueue = () => {
                     </button>
                 </div>
                 <div className="task-drawer-body">
-                    <TaskForm onTaskAdded={() => {
-                        setPage(1);
-                        loadTasks(1, pageSize);
-                        setDrawerOpen(false);
-                    }} />
+                    <TaskForm
+                        editTask={editTask}
+                        onTaskAdded={() => {
+                            setPage(1);
+                            loadTasks(1, pageSize);
+                            handleCloseDrawer();
+                        }}
+                    />
                 </div>
             </aside>
 
@@ -408,18 +263,9 @@ const SmartQueue = () => {
                 <div className="page-topbar">
                     <div className="page-topbar-left">
                         <h1 className="page-title">Smart Queue</h1>
-                        <p className="page-subtitle">Tasks ranked by AI priority score · auto-refreshes every 60s</p>
+                        <p className="page-subtitle">Tasks ranked by priority score · auto-refreshes every 60s</p>
                     </div>
                     <div className="page-topbar-right">
-                        {tasks.length > 0 && (
-                            <button className="btn-ghost" onClick={() => setFocusMode(true)}>
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <circle cx="12" cy="12" r="3"/>
-                                </svg>
-                                Focus Mode
-                            </button>
-                        )}
                         <button className="btn-primary btn-add-task" onClick={() => setDrawerOpen(true)}>
                             + Add Task
                         </button>
@@ -428,19 +274,31 @@ const SmartQueue = () => {
 
                 {/* Mini stats strip */}
                 <div className="queue-stats-row">
-                    <div className="queue-stat">
+                    <div
+                        className={`queue-stat${activeFilter === null ? ' active' : ''}`}
+                        onClick={() => setActiveFilter(null)}
+                    >
                         <span className="queue-stat-value">{totalCount}</span>
                         <span className="queue-stat-label">Pending</span>
                     </div>
-                    <div className="queue-stat">
+                    <div
+                        className={`queue-stat${activeFilter === 'critical' ? ' active' : ''}`}
+                        onClick={() => toggleFilter('critical')}
+                    >
                         <span className="queue-stat-value" style={{ color: 'var(--red)' }}>{criticalCount}</span>
                         <span className="queue-stat-label">Critical</span>
                     </div>
-                    <div className="queue-stat">
+                    <div
+                        className={`queue-stat${activeFilter === 'high' ? ' active' : ''}`}
+                        onClick={() => toggleFilter('high')}
+                    >
                         <span className="queue-stat-value" style={{ color: 'var(--amber)' }}>{highCount}</span>
                         <span className="queue-stat-label">High Priority</span>
                     </div>
-                    <div className="queue-stat">
+                    <div
+                        className={`queue-stat${activeFilter === 'selected' ? ' active' : ''}`}
+                        onClick={() => toggleFilter('selected')}
+                    >
                         <span className="queue-stat-value" style={{ color: 'var(--violet)' }}>{selected.size}</span>
                         <span className="queue-stat-label">Selected</span>
                     </div>
@@ -450,16 +308,30 @@ const SmartQueue = () => {
                 {selected.size > 0 && (
                     <div className="bulk-action-bar">
                         <span>{selected.size} task{selected.size !== 1 ? 's' : ''} selected</span>
-                        <button className="btn-sm btn-danger" onClick={handleDeleteSelected}>
-                            Delete Selected
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="btn-sm btn-success" onClick={handleBulkDone}>
+                                Mark Done
+                            </button>
+                            {selected.size === 1 && (
+                                <button
+                                    className="btn-sm"
+                                    style={{ background: '#1e3a5f', color: '#60a5fa', border: '1px solid #2563eb' }}
+                                    onClick={handleOpenEdit}
+                                >
+                                    Edit
+                                </button>
+                            )}
+                            <button className="btn-sm btn-danger" onClick={handleDeleteSelected}>
+                                Delete
+                            </button>
+                        </div>
                     </div>
                 )}
 
                 {error && <div className="error-msg">{error}</div>}
 
                 {loading ? (
-                    <div className="loading">Engine is scoring tasks…</div>
+                    <div className="loading">Loading tasks…</div>
                 ) : tasks.length === 0 ? (
                     <div className="empty-state">
                         <div style={{ fontSize: '2.5rem' }}>🎉</div>
@@ -471,25 +343,24 @@ const SmartQueue = () => {
                         {/* List header */}
                         <div className="task-list-header">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={allSelected}
-                                    onChange={handleSelectAll}
-                                    title="Select all"
-                                    style={{ accentColor: '#7c3aed', cursor: 'pointer', width: '1rem', height: '1rem' }}
-                                />
-                                <span className="task-count-badge">{totalCount} tasks</span>
+                                <div className="task-checkbox-wrap" style={{ padding: '0 0.2rem 0 0' }}>
+                                    <input
+                                        type="checkbox"
+                                        className="task-checkbox"
+                                        checked={allSelected}
+                                        onChange={handleSelectAll}
+                                        title="Select all"
+                                    />
+                                </div>
+                                <span className="task-count-badge">{displayedTasks.length} tasks{activeFilter ? ' (filtered)' : ''}</span>
                             </div>
                         </div>
 
                         <div className="task-list">
-                            {tasks.map(task => (
+                            {displayedTasks.map(task => (
                                 <TaskRow
                                     key={task.id}
                                     task={task}
-                                    onComplete={handleComplete}
-                                    onDelete={handleDelete}
-                                    onEdit={handleEdit}
                                     isSelected={selected.has(task.id)}
                                     onToggleSelect={handleToggleSelect}
                                 />
