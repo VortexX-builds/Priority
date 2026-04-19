@@ -1,91 +1,152 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { fetchUsers, fetchTasks, fetchStats, createUser } from '../api';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { fetchCompletedTasks, fetchStats } from '../api';
 
-const velocityColor = (v) => {
-    if (v > 1.2)  return 'var(--priority-high)';
-    if (v < 0.85) return 'var(--accent-color)';
-    return 'var(--success-color)';
+const velColor = (v) => {
+    if (v >= 1.0) return '#10b981';
+    if (v >= 0.7) return '#f59e0b';
+    return '#ef4444';
 };
 
-const velocityLabel = (v) => {
-    if (v > 1.2)  return 'Running slow';
-    if (v < 0.85) return 'High efficiency';
-    return 'On track';
+const velLabel = (v) => {
+    if (v >= 1.0) return 'Fast';
+    if (v >= 0.7) return 'On Track';
+    return 'Slow';
 };
 
-const velBarWidth = (v) => `${Math.min((v / 2) * 100, 100)}%`;
+const VelocityBar = ({ velocityScore, animate }) => {
+    const capped = Math.min(velocityScore / 3.0, 1.0);
+    const color  = velColor(velocityScore);
+
+    const glowColor = color === '#10b981'
+        ? 'rgba(16,185,129,0.45)'
+        : color === '#f59e0b'
+            ? 'rgba(245,158,11,0.45)'
+            : 'rgba(239,68,68,0.45)';
+
+    const gradientLight = color === '#10b981'
+        ? '#6ee7b7'
+        : color === '#f59e0b'
+            ? '#fcd34d'
+            : '#fca5a5';
+
+    return (
+        <div style={{
+            flex: 1,
+            height: '10px',
+            borderRadius: '5px',
+            background: 'rgba(255,255,255,0.06)',
+            overflow: 'hidden',
+            position: 'relative',
+        }}>
+            <div style={{
+                height: '100%',
+                borderRadius: '5px',
+                background: `linear-gradient(90deg, ${color} 0%, ${gradientLight} 100%)`,
+                boxShadow: animate ? `0 0 10px ${glowColor}, 0 0 4px ${glowColor}` : 'none',
+                width: animate ? `${capped * 100}%` : '0%',
+                transition: 'width 0.75s cubic-bezier(0.22, 1, 0.36, 1)',
+                position: 'relative',
+                overflow: 'hidden',
+            }}>
+                {animate && (
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: `linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%)`,
+                        animation: 'vel-shimmer 1.1s ease-out 0.75s 1 forwards',
+                        transform: 'translateX(-100%)',
+                    }} />
+                )}
+            </div>
+        </div>
+    );
+};
 
 const PulseDashboard = () => {
-    const [users, setUsers]     = useState([]);
-    const [tasks, setTasks]     = useState([]);
-    const [stats, setStats]     = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError]     = useState('');
-
-    const [memberName, setMemberName]       = useState('');
-    const [memberRole, setMemberRole]       = useState('MEMBER');
-    const [addingMember, setAddingMember]   = useState(false);
-    const [memberError, setMemberError]     = useState('');
-    const [memberSuccess, setMemberSuccess] = useState(false);
+    const [completedTasks,      setCompletedTasks]      = useState([]);
+    const [stats,               setStats]               = useState(null);
+    const [loading,             setLoading]             = useState(true);
+    const [error,               setError]               = useState('');
+    const [animate,             setAnimate]             = useState(false);
+    const [completedPage,       setCompletedPage]       = useState(1);
+    const [completedTotalPages, setCompletedTotalPages] = useState(1);
+    const [completedTotal,      setCompletedTotal]      = useState(0);
+    const [searchInput,         setSearchInput]         = useState('');
+    const [search,              setSearch]              = useState('');
+    const debounceRef = useRef(null);
 
     const loadData = useCallback(async () => {
         try {
-            const [usersData, tasksData, statsData] = await Promise.all([
-                fetchUsers(),
-                fetchTasks(),
+            const [tasksData, statsData] = await Promise.all([
+                fetchCompletedTasks({ page: completedPage, pageSize: 5, search }),
                 fetchStats(),
             ]);
-            setUsers(usersData);
-            setTasks(tasksData.tasks || []);
+            setCompletedTasks(tasksData.tasks);
+            setCompletedTotalPages(tasksData.totalPages);
+            setCompletedTotal(tasksData.total);
             setStats(statsData);
             setError('');
-        } catch {
-            setError('Cannot reach the server. Make sure the backend is running.');
+            setAnimate(false);
+            requestAnimationFrame(() => requestAnimationFrame(() => setAnimate(true)));
+        } catch (err) {
+            if (err instanceof TypeError) {
+                setError('Cannot reach the server. Make sure the backend is running.');
+            } else {
+                setError(`Server error: ${err.message}`);
+            }
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [completedPage, search]);
 
     useEffect(() => { loadData(); }, [loadData]);
 
-    const handleAddMember = async (e) => {
-        e.preventDefault();
-        setMemberError('');
-        setMemberSuccess(false);
-        if (!memberName.trim()) { setMemberError('Name is required.'); return; }
-        setAddingMember(true);
-        try {
-            await createUser({ name: memberName.trim(), role: memberRole });
-            setMemberName('');
-            setMemberRole('MEMBER');
-            setMemberSuccess(true);
-            setTimeout(() => setMemberSuccess(false), 2500);
-            await loadData();
-        } catch {
-            setMemberError('Failed to add member.');
-        } finally {
-            setAddingMember(false);
-        }
+    const handleSearchInput = (e) => {
+        const val = e.target.value;
+        setSearchInput(val);
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            setCompletedPage(1);
+            setSearch(val);
+        }, 300);
     };
 
     if (loading) return <div className="loading">Loading dashboard…</div>;
 
-    const completedTasks = tasks.filter(t => t.status === 'COMPLETED');
-    const pendingTasks   = tasks.filter(t => t.status !== 'COMPLETED');
+    const totalTasks     = stats?.total     ?? 0;
+    const completedCount = stats?.completed ?? 0;
+    const pendingCount   = stats?.pending   ?? 0;
+    const overdueCount   = stats?.overdue   ?? 0;
 
     return (
         <div>
-            {/* Page top bar */}
+            <style>{`
+                @keyframes vel-shimmer {
+                    0%   { transform: translateX(-100%); }
+                    100% { transform: translateX(200%); }
+                }
+            `}</style>
+
             <div className="page-topbar">
                 <div className="page-topbar-left">
                     <h1 className="page-title">Pulse Dashboard</h1>
-                    <p className="page-subtitle">Team performance and task analytics</p>
+                    <p className="page-subtitle">Task analytics and velocity tracker</p>
                 </div>
             </div>
 
-            {error && <div className="error-msg">{error}</div>}
+            {error && (
+                <div className="error-msg" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>{error}</span>
+                    <button onClick={loadData} style={{ marginLeft: '1rem', padding: '0.25rem 0.75rem', cursor: 'pointer', background: 'transparent', border: '1px solid currentColor', borderRadius: '4px', color: 'inherit', fontSize: '0.8rem' }}>
+                        Retry
+                    </button>
+                </div>
+            )}
 
-            {/* Stats row — icon-based cards */}
+            {/* Stats row */}
             <div className="stats-grid">
                 <div className="card stat-card">
                     <div className="stat-icon-box" style={{ background: 'rgba(99,102,241,0.15)', color: 'var(--indigo)' }}>
@@ -96,7 +157,7 @@ const PulseDashboard = () => {
                         </svg>
                     </div>
                     <div className="stat-body">
-                        <div className="stat-value">{tasks.length}</div>
+                        <div className="stat-value">{totalTasks}</div>
                         <div className="stat-label">Total Tasks</div>
                     </div>
                 </div>
@@ -108,7 +169,7 @@ const PulseDashboard = () => {
                         </svg>
                     </div>
                     <div className="stat-body">
-                        <div className="stat-value green">{completedTasks.length}</div>
+                        <div className="stat-value green">{completedCount}</div>
                         <div className="stat-label">Completed</div>
                     </div>
                 </div>
@@ -121,7 +182,7 @@ const PulseDashboard = () => {
                         </svg>
                     </div>
                     <div className="stat-body">
-                        <div className="stat-value amber">{pendingTasks.length}</div>
+                        <div className="stat-value amber">{pendingCount}</div>
                         <div className="stat-label">Pending</div>
                     </div>
                 </div>
@@ -135,145 +196,145 @@ const PulseDashboard = () => {
                         </svg>
                     </div>
                     <div className="stat-body">
-                        <div className="stat-value red">{stats ? stats.overdue : '—'}</div>
+                        <div className="stat-value red">{overdueCount}</div>
                         <div className="stat-label">Overdue</div>
                     </div>
                 </div>
-
-                <div className="card stat-card">
-                    <div className="stat-icon-box" style={{ background: 'rgba(168,85,247,0.12)', color: 'var(--purple)' }}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                            <circle cx="9" cy="7" r="4"/>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                        </svg>
-                    </div>
-                    <div className="stat-body">
-                        <div className="stat-value purple">{users.length}</div>
-                        <div className="stat-label">Team Members</div>
-                    </div>
-                </div>
             </div>
 
-            {/* Two-column bottom section */}
-            <div className="dash-grid">
-                {/* Add team member */}
-                <div className="card">
-                    <h3 className="section-title">Add Team Member</h3>
-                    {memberError   && <div className="error-msg">{memberError}</div>}
-                    {memberSuccess && (
-                        <div style={{ color: 'var(--success-color)', fontSize: '0.88rem', marginBottom: '0.8rem' }}>
-                            ✓ Member added!
-                        </div>
-                    )}
-                    <form onSubmit={handleAddMember} className="add-member-form">
-                        <div className="form-group">
-                            <label htmlFor="member-name">Full Name</label>
-                            <input
-                                id="member-name"
-                                className="form-control"
-                                value={memberName}
-                                onChange={(e) => setMemberName(e.target.value)}
-                                placeholder="e.g. Alex Johnson"
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label htmlFor="member-role">Role</label>
-                            <select
-                                id="member-role"
-                                className="form-control"
-                                value={memberRole}
-                                onChange={(e) => setMemberRole(e.target.value)}
-                            >
-                                <option value="MEMBER">Member</option>
-                                <option value="MANAGER">Manager</option>
-                                <option value="LEAD">Lead</option>
-                            </select>
-                        </div>
-                        <button
-                            type="submit"
-                            className="btn-primary"
-                            disabled={addingMember}
-                            style={{ width: 'auto', padding: '0.7rem 1.2rem', alignSelf: 'flex-end', marginBottom: 0 }}
-                        >
-                            {addingMember ? 'Adding…' : '+ Add'}
-                        </button>
-                    </form>
-                </div>
-
-                {/* Recently completed */}
-                <div className="card">
-                    <h3 className="section-title">Recently Completed</h3>
-                    {completedTasks.length === 0 ? (
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                            No completed tasks yet.
-                        </p>
-                    ) : (
-                        <div className="completed-items">
-                            {completedTasks.map(t => (
-                                <div key={t.id} className="completed-item">
-                                    <span className="item-title">{t.title}</span>
-                                    <span className="item-meta">Done ✓</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Team velocity table */}
+            {/* Task Velocity Tracker */}
             <div className="card" style={{ marginTop: 0 }}>
-                <h3 className="section-title">Team Velocity Tracker</h3>
-                {users.length === 0 ? (
+                <h3 className="section-title">Task Velocity Tracker</h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-3, #71717a)', marginBottom: '1.1rem', marginTop: '-0.4rem' }}>
+                    Velocity = (effort × 1.5) ÷ hours taken &nbsp;·&nbsp; 1.0x = on time &nbsp;·&nbsp; bar capped at 3.0x
+                </p>
+
+                {/* Search bar */}
+                <div style={{ position: 'relative', marginBottom: '1.1rem' }}>
+                    <svg
+                        width="15" height="15"
+                        viewBox="0 0 24 24" fill="none" stroke="var(--text-3, #71717a)"
+                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                        style={{ position: 'absolute', left: '0.7rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                    >
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input
+                        type="text"
+                        placeholder="Search completed tasks…"
+                        value={searchInput}
+                        onChange={handleSearchInput}
+                        style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '0.45rem 0.75rem 0.45rem 2.1rem',
+                            background: 'var(--surface-2, #1e1e2e)',
+                            border: '1px solid var(--border-color, #2e2e3e)',
+                            borderRadius: '6px',
+                            color: 'var(--text-1)',
+                            fontSize: '0.85rem',
+                            outline: 'none',
+                        }}
+                    />
+                </div>
+
+                {completedTasks.length === 0 ? (
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                        No team members yet. Add one above.
+                        {search
+                            ? `No completed tasks match "${search}".`
+                            : 'No completed tasks yet. Mark tasks done in Smart Queue to see velocity data.'}
                     </p>
                 ) : (
-                    <table className="user-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Role</th>
-                                <th>Velocity</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {users.map(user => {
-                                const vel   = user.avg_velocity || 1.0;
-                                const color = velocityColor(vel);
-                                const label = velocityLabel(vel);
+                    <>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {completedTasks.map(t => {
+                                const vel   = t.velocity_score != null ? t.velocity_score : null;
+                                const color = vel != null ? velColor(vel) : 'var(--text-3)';
+                                const label = vel != null ? velLabel(vel) : null;
+
                                 return (
-                                    <tr key={user.id}>
-                                        <td>
-                                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                <span className="member-avatar">
-                                                    {user.name.charAt(0).toUpperCase()}
+                                    <div key={t.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                        {/* Row: title + badges */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                                            <span style={{
+                                                fontSize: '0.88rem',
+                                                fontWeight: 600,
+                                                color: 'var(--text-1)',
+                                                flex: 1,
+                                                minWidth: 0,
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap',
+                                            }}>
+                                                {t.title}
+                                            </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
+                                                <span style={{ fontSize: '0.73rem', color: 'var(--text-3)' }}>
+                                                    effort {t.effort}
                                                 </span>
-                                                <span style={{ fontWeight: 600 }}>{user.name}</span>
+                                                {vel != null && (
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.25rem',
+                                                        padding: '0.15rem 0.55rem',
+                                                        borderRadius: '999px',
+                                                        background: `${color}18`,
+                                                        border: `1px solid ${color}40`,
+                                                        fontFamily: 'JetBrains Mono, monospace',
+                                                        fontSize: '0.78rem',
+                                                        fontWeight: 700,
+                                                        color,
+                                                    }}>
+                                                        {Math.min(vel, 3).toFixed(2)}x
+                                                        <span style={{ fontFamily: 'inherit', fontSize: '0.7rem', fontWeight: 600 }}>{label}</span>
+                                                    </span>
+                                                )}
                                             </div>
-                                        </td>
-                                        <td><span className="role-badge">{user.role}</span></td>
-                                        <td>
-                                            <div className="vel-bar-wrap">
-                                                <div className="vel-bar-bg">
-                                                    <div
-                                                        className="vel-bar-fill"
-                                                        style={{ width: velBarWidth(vel), background: color }}
-                                                    />
+                                        </div>
+
+                                        {/* Velocity bar */}
+                                        {vel != null
+                                            ? <VelocityBar velocityScore={vel} animate={animate} />
+                                            : (
+                                                <div style={{ fontSize: '0.73rem', color: 'var(--text-3)', fontStyle: 'italic' }}>
+                                                    No hours logged — velocity unavailable
                                                 </div>
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color }}>
-                                                    {vel.toFixed(2)}x
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td style={{ color, fontWeight: 600, fontSize: '0.85rem' }}>{label}</td>
-                                    </tr>
+                                            )
+                                        }
+                                    </div>
                                 );
                             })}
-                        </tbody>
-                    </table>
+                        </div>
+
+                        {/* Pagination */}
+                        {completedTotalPages > 1 && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1.2rem', paddingTop: '0.9rem', borderTop: '1px solid var(--border-color, #2e2e3e)' }}>
+                                <button
+                                    className="btn-sm"
+                                    onClick={() => setCompletedPage(p => Math.max(1, p - 1))}
+                                    disabled={completedPage === 1}
+                                    style={{ opacity: completedPage === 1 ? 0.4 : 1 }}
+                                >
+                                    ← Prev
+                                </button>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-3)' }}>
+                                    Page {completedPage} of {completedTotalPages}
+                                    <span style={{ marginLeft: '0.4rem', color: 'var(--text-3)', fontStyle: 'italic' }}>
+                                        ({completedTotal} total)
+                                    </span>
+                                </span>
+                                <button
+                                    className="btn-sm"
+                                    onClick={() => setCompletedPage(p => Math.min(completedTotalPages, p + 1))}
+                                    disabled={completedPage === completedTotalPages}
+                                    style={{ opacity: completedPage === completedTotalPages ? 0.4 : 1 }}
+                                >
+                                    Next →
+                                </button>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </div>

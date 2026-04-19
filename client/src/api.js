@@ -86,3 +86,10 @@ export const fetchStats = async () => {
     if (!res.ok) throw new Error('Failed to fetch stats');
     return res.json();
 };
+
+// --- COMPLETED TASKS (velocity tracker) ---
+export const fetchCompletedTasks = async ({ page = 1, pageSize = 5, search = '' } = {}) => {
+    const res = await fetch(`${API_BASE}/completed-tasks?page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}`);
+    if (!res.ok) throw new Error('Failed to fetch completed tasks');
+    return res.json();
+};

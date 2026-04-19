@@ -202,6 +202,47 @@ app.get('/api/stats', (req, res) => {
     });
 });
 
+app.get('/api/completed-tasks', (req, res) => {
+    const page     = Math.max(1, parseInt(req.query.page)     || 1);
+    const pageSize = Math.min(50,  Math.max(1, parseInt(req.query.pageSize) || 5));
+    const search   = req.query.search ? `%${req.query.search}%` : '%';
+    const offset   = (page - 1) * pageSize;
+
+    db.get(
+        `SELECT COUNT(*) as total FROM Tasks WHERE status = 'COMPLETED' AND title LIKE ?`,
+        [search],
+        (err, countRow) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const total      = countRow.total;
+            const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+            const query = `
+                SELECT Tasks.id, Tasks.title, Tasks.effort, Logic_Logs.actual_duration
+                FROM Tasks
+                LEFT JOIN Logic_Logs ON Tasks.id = Logic_Logs.task_id
+                WHERE Tasks.status = 'COMPLETED'
+                  AND Tasks.title LIKE ?
+                ORDER BY Tasks.id DESC
+                LIMIT ? OFFSET ?
+            `;
+            db.all(query, [search, pageSize, offset], (err, rows) => {
+                if (err) return res.status(500).json({ error: err.message });
+
+                const tasks = rows.map(t => ({
+                    id:             t.id,
+                    title:          t.title,
+                    effort:         t.effort,
+                    velocity_score: t.actual_duration
+                        ? parseFloat(((t.effort * 1.5) / t.actual_duration).toFixed(3))
+                        : null,
+                }));
+
+                res.json({ tasks, total, page, pageSize, totalPages });
+            });
+        }
+    );
+});
+
 app.listen(PORT, () => {
     console.log(`Priority running on port ${PORT}`);
 });
