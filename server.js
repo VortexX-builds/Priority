@@ -166,10 +166,13 @@ app.delete('/api/tasks', (req, res) => {
 
 app.delete('/api/tasks/:id', (req, res) => {
     const taskId = req.params.id;
-    db.run(`DELETE FROM Tasks WHERE id = ?`, [taskId], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ error: 'Task not found' });
-        res.json({ message: 'Task deleted.' });
+    db.run(`DELETE FROM Logic_Logs WHERE task_id = ?`, [taskId], (logErr) => {
+        if (logErr) return res.status(500).json({ error: logErr.message });
+        db.run(`DELETE FROM Tasks WHERE id = ?`, [taskId], function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            if (this.changes === 0) return res.status(404).json({ error: 'Task not found' });
+            res.json({ message: 'Task deleted.' });
+        });
     });
 });
 

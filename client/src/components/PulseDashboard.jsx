@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchCompletedTasks, fetchStats } from '../api';
+import { fetchCompletedTasks, fetchStats, deleteTask } from '../api';
 
 const velColor = (v) => {
     if (v >= 1.0) return '#10b981';
@@ -13,8 +13,8 @@ const velLabel = (v) => {
     return 'Slow';
 };
 
-const VelocityBar = ({ velocityScore, animate }) => {
-    const capped = Math.min(velocityScore / 3.0, 1.0);
+const VelocityBar = ({ velocityScore }) => {
+    const capped = Math.min(Math.max(velocityScore / 3.0, 0.015), 1.0);
     const color  = velColor(velocityScore);
 
     const glowColor = color === '#10b981'
@@ -31,35 +31,31 @@ const VelocityBar = ({ velocityScore, animate }) => {
 
     return (
         <div style={{
-            flex: 1,
+            width: '100%',
             height: '10px',
             borderRadius: '5px',
-            background: 'rgba(255,255,255,0.06)',
+            background: 'rgba(255,255,255,0.12)',
             overflow: 'hidden',
             position: 'relative',
         }}>
             <div style={{
                 height: '100%',
+                width: `${capped * 100}%`,
                 borderRadius: '5px',
                 background: `linear-gradient(90deg, ${color} 0%, ${gradientLight} 100%)`,
-                boxShadow: animate ? `0 0 10px ${glowColor}, 0 0 4px ${glowColor}` : 'none',
-                width: animate ? `${capped * 100}%` : '0%',
-                transition: 'width 0.75s cubic-bezier(0.22, 1, 0.36, 1)',
+                boxShadow: `0 0 10px ${glowColor}, 0 0 4px ${glowColor}`,
+                transformOrigin: 'left center',
+                animation: 'vel-fill 0.9s cubic-bezier(0.22, 1, 0.36, 1) both',
                 position: 'relative',
                 overflow: 'hidden',
             }}>
-                {animate && (
-                    <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: `linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%)`,
-                        animation: 'vel-shimmer 1.1s ease-out 0.75s 1 forwards',
-                        transform: 'translateX(-100%)',
-                    }} />
-                )}
+                <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%)',
+                    transform: 'translateX(-100%)',
+                    animation: 'vel-shimmer 1.1s ease-out 0.9s 1 forwards',
+                }} />
             </div>
         </div>
     );
@@ -70,7 +66,7 @@ const PulseDashboard = () => {
     const [stats,               setStats]               = useState(null);
     const [loading,             setLoading]             = useState(true);
     const [error,               setError]               = useState('');
-    const [animate,             setAnimate]             = useState(false);
+    const [reloadKey,           setReloadKey]           = useState(0);
     const [completedPage,       setCompletedPage]       = useState(1);
     const [completedTotalPages, setCompletedTotalPages] = useState(1);
     const [completedTotal,      setCompletedTotal]      = useState(0);
@@ -89,8 +85,7 @@ const PulseDashboard = () => {
             setCompletedTotal(tasksData.total);
             setStats(statsData);
             setError('');
-            setAnimate(false);
-            requestAnimationFrame(() => requestAnimationFrame(() => setAnimate(true)));
+            setReloadKey(k => k + 1);
         } catch (err) {
             if (err instanceof TypeError) {
                 setError('Cannot reach the server. Make sure the backend is running.');
@@ -103,6 +98,20 @@ const PulseDashboard = () => {
     }, [completedPage, search]);
 
     useEffect(() => { loadData(); }, [loadData]);
+
+    const handleDeleteCompleted = async (taskId) => {
+        if (!window.confirm('Delete this completed task? This cannot be undone.')) return;
+        try {
+            await deleteTask(taskId);
+            if (completedTasks.length === 1 && completedPage > 1) {
+                setCompletedPage(p => p - 1);
+            } else {
+                await loadData();
+            }
+        } catch (err) {
+            setError(`Failed to delete task: ${err.message}`);
+        }
+    };
 
     const handleSearchInput = (e) => {
         const val = e.target.value;
@@ -124,6 +133,10 @@ const PulseDashboard = () => {
     return (
         <div>
             <style>{`
+                @keyframes vel-fill {
+                    0%   { transform: scaleX(0); }
+                    100% { transform: scaleX(1); }
+                }
                 @keyframes vel-shimmer {
                     0%   { transform: translateX(-100%); }
                     100% { transform: translateX(200%); }
@@ -253,7 +266,7 @@ const PulseDashboard = () => {
                                 const label = vel != null ? velLabel(vel) : null;
 
                                 return (
-                                    <div key={t.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    <div key={`${t.id}-${reloadKey}`} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                         {/* Row: title + badges */}
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
                                             <span style={{
@@ -290,12 +303,36 @@ const PulseDashboard = () => {
                                                         <span style={{ fontFamily: 'inherit', fontSize: '0.7rem', fontWeight: 600 }}>{label}</span>
                                                     </span>
                                                 )}
+                                                <button
+                                                    onClick={() => handleDeleteCompleted(t.id)}
+                                                    title="Delete completed task"
+                                                    aria-label="Delete completed task"
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        width: '1.55rem',
+                                                        height: '1.55rem',
+                                                        padding: 0,
+                                                        borderRadius: '999px',
+                                                        background: 'transparent',
+                                                        border: '1px solid rgba(239,68,68,0.25)',
+                                                        color: '#ef4444',
+                                                        fontSize: '0.9rem',
+                                                        lineHeight: 1,
+                                                        cursor: 'pointer',
+                                                    }}
+                                                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; }}
+                                                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                                                >
+                                                    ×
+                                                </button>
                                             </div>
                                         </div>
 
                                         {/* Velocity bar */}
                                         {vel != null
-                                            ? <VelocityBar velocityScore={vel} animate={animate} />
+                                            ? <VelocityBar velocityScore={vel} />
                                             : (
                                                 <div style={{ fontSize: '0.73rem', color: 'var(--text-3)', fontStyle: 'italic' }}>
                                                     No hours logged — velocity unavailable

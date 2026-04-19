@@ -206,15 +206,25 @@ const SmartQueue = () => {
         }
     };
 
-    const handleBulkDone = async () => {
+    const handleMarkDone = async () => {
+        if (selected.size !== 1) {
+            setError('Mark one task at a time so hours taken maps correctly.');
+            return;
+        }
+        const hours = parseFloat(hoursInput);
+        if (!Number.isFinite(hours) || hours <= 0) {
+            setError('Hours taken is required to compute velocity.');
+            return;
+        }
         try {
-            const hours = parseFloat(hoursInput) || 0;
-            await Promise.all([...selected].map(id => completeTask(id, hours)));
+            const taskId = [...selected][0];
+            await completeTask(taskId, hours);
             setSelected(new Set());
             setHoursInput('');
+            setError('');
             await loadTasks(page, pageSize);
         } catch {
-            setError('Failed to mark tasks as done.');
+            setError('Failed to mark task as done.');
         }
     };
 
@@ -383,41 +393,55 @@ const SmartQueue = () => {
                 </div>
 
                 {/* Bulk action bar */}
-                {selected.size > 0 && (
-                    <div className="bulk-action-bar">
-                        <span>{selected.size} task{selected.size !== 1 ? 's' : ''} selected</span>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                            <input
-                                type="number"
-                                min="0"
-                                step="0.5"
-                                placeholder="Hours taken"
-                                value={hoursInput}
-                                onChange={(e) => setHoursInput(e.target.value)}
-                                style={{
-                                    width: '9rem', padding: '0.3rem 0.5rem',
-                                    background: 'var(--surface-2)', border: '1px solid var(--border-color)',
-                                    borderRadius: '4px', color: 'var(--text-1)', fontSize: '0.82rem'
-                                }}
-                            />
-                            <button className="btn-sm btn-success" onClick={handleBulkDone}>
-                                Mark Done
-                            </button>
-                            {selected.size === 1 && (
-                                <button
-                                    className="btn-sm"
-                                    style={{ background: 'rgba(37,99,235,0.1)', color: '#60a5fa', border: '1px solid rgba(37,99,235,0.25)' }}
-                                    onClick={handleOpenEdit}
-                                >
-                                    Edit
+                {selected.size > 0 && (() => {
+                    const isSingle      = selected.size === 1;
+                    const parsedHours   = parseFloat(hoursInput);
+                    const hoursInvalid  = isSingle && hoursInput !== '' && (!Number.isFinite(parsedHours) || parsedHours <= 0);
+                    return (
+                        <div className="bulk-action-bar">
+                            <span>{selected.size} task{selected.size !== 1 ? 's' : ''} selected</span>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                {isSingle && (
+                                    <input
+                                        type="number"
+                                        min="0.25"
+                                        step="0.25"
+                                        placeholder="Hours taken *"
+                                        value={hoursInput}
+                                        onChange={(e) => setHoursInput(e.target.value)}
+                                        style={{
+                                            width: '9rem', padding: '0.3rem 0.5rem',
+                                            background: 'var(--surface-2)',
+                                            border: `1px solid ${hoursInvalid ? '#ef4444' : 'var(--border-color)'}`,
+                                            borderRadius: '4px', color: 'var(--text-1)', fontSize: '0.82rem'
+                                        }}
+                                    />
+                                )}
+                                {isSingle ? (
+                                    <>
+                                        <button className="btn-sm btn-success" onClick={handleMarkDone}>
+                                            Mark Done
+                                        </button>
+                                        <button
+                                            className="btn-sm"
+                                            style={{ background: 'rgba(37,99,235,0.1)', color: '#60a5fa', border: '1px solid rgba(37,99,235,0.25)' }}
+                                            onClick={handleOpenEdit}
+                                        >
+                                            Edit
+                                        </button>
+                                    </>
+                                ) : (
+                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-3)', fontStyle: 'italic' }}>
+                                        Select a single task to mark done
+                                    </span>
+                                )}
+                                <button className="btn-sm btn-danger" onClick={handleDeleteSelected}>
+                                    Delete
                                 </button>
-                            )}
-                            <button className="btn-sm btn-danger" onClick={handleDeleteSelected}>
-                                Delete
-                            </button>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    );
+                })()}
 
                 {error && <div className="error-msg">{error}</div>}
 
