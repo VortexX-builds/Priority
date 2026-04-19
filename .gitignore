@@ -1,0 +1,5 @@
+node_modules/
+.env
+prioritize.db
+*.log
+.DS_Store
